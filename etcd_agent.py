@@ -4,11 +4,11 @@ import etcd
 import json
 import subprocess
 import argparse
-import os
-import pwd
-import grp
+import os, signal
+import pwd, grp
 import time
 import logging
+import datetime
 from daemonize import Daemonize
 
 class Etcd_agent(Daemonize):
@@ -17,6 +17,7 @@ class Etcd_agent(Daemonize):
         self._etcd_port = etcd_port
         self._etcd_path = etcd_path
         self._etcd_index = 0
+        self.default_exec_timeout = 600
 
         self.log = logging.getLogger('etcd_agent')
         self.fh = logging.FileHandler(log_file, 'w')
@@ -64,7 +65,8 @@ class Etcd_agent(Daemonize):
                                                                     self.new_etcd_index))
         if data and self._etcd_index != self.new_etcd_index:
             self._etcd_index = self.new_etcd_index
-            for command in data['action']['exec']:
+            self.exec_timeout = data['action'].get('timeout', self.default_exec_timeout)
+            for command in data['action'].get('exec'):
                 self.log.info('Execute command - %s' % command)
                 self.cmd(command)
 
@@ -74,8 +76,18 @@ class Etcd_agent(Daemonize):
     def cmd(self, *args, **kwargs):
         self.uid = pwd.getpwnam(kwargs.get('uid', 'root')).pw_uid
         self.gid = grp.getgrnam(kwargs.get('uid', 'root')).gr_gid
+        start = datetime.datetime.now()
         proc = subprocess.Popen(args, preexec_fn=lambda : (os.setegid(self.uid), os.seteuid(self.gid)),
-                                                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell = True)
+                                                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                                           shell=True)
+        while proc.poll() is None:
+            time.sleep(0.1)
+            now =  datetime.datetime.now()
+            if (now - start).seconds > self.exec_timeout:
+                self.log.error('Process was killed due to exec_timeout - %d' % proc.pid)
+                os.kill(proc.pid, signal.SIGKILL)
+                os.waitpid(-1, os.WNOHANG)
+                return None
         self.log.info('Command output - %s' % proc.stdout.read())
         self.exitcode = proc.wait()
         self.log.info('Exitcode of command - %s' % self.exitcode)
