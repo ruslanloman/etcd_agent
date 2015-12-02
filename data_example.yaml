@@ -1,0 +1,5 @@
+---
+action:
+    exec:
+#      - 'bash -c "echo Action1"'
+#      - 'bash -c "echo Action2"'

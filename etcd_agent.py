@@ -40,8 +40,11 @@ class Etcd_agent(Daemonize):
         while True:
             try:
                 return func(*args, **kwargs)
-            except (etcd.EtcdKeyNotFound, etcd.EtcdConnectionFailed) as e:
-                self.log.error('Try to get data from etcd %s' % e)
+            except etcd.EtcdConnectionFailed as e:
+                self.log.error('Can\'t connect to etcd %s' % e)
+            except etcd.EtcdKeyNotFound as e:
+                self.log.error(e)
+                time.sleep(10)
 
     def get_action(self):
         self.log.info('Retrive data from etcd')
