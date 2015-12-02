@@ -30,19 +30,27 @@ class Etcd_agent(Daemonize):
                                          keep_fds=[self.fh.stream.fileno()])
 
     def run(self):
-        self.client = etcd.Client(host=self._etcd_host, port=self._etcd_port)
         self.log.info('Starting etcd daemon...')
+        self.client = etcd.Client(host=self._etcd_host, port=self._etcd_port)
         while True:
             self.execute(self.get_action())
             time.sleep(5)
 
+    def retry(self, func, *args, **kwargs):
+        while True:
+            try:
+                return func(*args, **kwargs)
+            except (etcd.EtcdKeyNotFound, etcd.EtcdConnectionFailed) as e:
+                self.log.error('Try to get data from etcd %s' % e)
+
     def get_action(self):
         self.log.info('Retrive data from etcd')
+        self.resp = self.retry(self.client.read, self._etcd_path)
         try:
-           self.resp = (self.client.read(self._etcd_path))
            self.new_etcd_index = self.resp.etcd_index
            self.action = json.loads(self.resp.value)
-        except (ValueError, etcd.EtcdKeyNotFound) as e:
+        except (ValueError, etcd.EtcdKeyNotFound, etc.EtcdConnectionFailed) as e:
+           self.log.error('get_action failed %s' % e)
            self.action = False
         finally:
            self.log.info('Data info from etcd - %s' % self.action)
@@ -56,6 +64,7 @@ class Etcd_agent(Daemonize):
             for command in data['action']['exec']:
                 self.log.info('Execute command - %s' % command)
                 self.cmd(command)
+
     def lock(self):
         pass
 
