@@ -6,6 +6,7 @@
 # Required-Stop:     $remote_fs $syslog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
+# chkconfig:         35 99 10
 # Short-Description: Put a short description of the service here
 # Description:       Put a long description of the service here
 ### END INIT INFO
@@ -16,22 +17,21 @@ DAEMON_USER=root
 DAEMON=$DIR/etcd_agent.py
 DAEMON_NAME=etcd_agent
 
-DAEMON_OPTS="--etcd_host 172.17.0.3"
+. /etc/default/etcd_agent.ini
+DAEMON_OPTS="--etcd-host=${etcd_host} --etcd-path=${etcd_path} --ssl --ssl-ca=${ca} --ssl-cert=${cert} --ssl-key=${key}"
 # The process ID of the script when it runs is stored here:
 PIDFILE=/var/run/$DAEMON_NAME.pid
 
-. /lib/lsb/init-functions
+. /etc/init.d/functions
 
 do_start () {
-    log_daemon_msg "Starting system $DAEMON_NAME daemon"
-    start-stop-daemon --start --pidfile $PIDFILE --user $DAEMON_USER --chuid $DAEMON_USER --startas $DAEMON -- $DAEMON_OPTS
-    log_end_msg $?
+    echo -n "Starting etcd_agent"
+    daemon --user $DAEMON_USER --pidfile $PIDFILE $DAEMON $DAEMON_OPTS
 }
 
 do_stop () {
-    log_daemon_msg "Stopping system $DAEMON_NAME daemon"
-    start-stop-daemon --stop --pidfile $PIDFILE --retry 10
-    log_end_msg $?
+    echo -n "Shutting down"
+    killproc --pidfile
 }
 
 case "$1" in
